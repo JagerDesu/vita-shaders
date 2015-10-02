@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "log.h"
 #include "resolve.h"
 
 #define SHACC_BASE0 0x84700550
@@ -52,80 +53,110 @@ void load_binaries(void) {
 	init_nullpage();
 }
 
-struct shader_first
-{
-  int field_0;
-  int field_4;
-  int field_8;
-  int field_C;
-  int field_10;
-  int field_14;
-};
+typedef struct {
+	int field_0;
+	int field_4;
+	int field_8;
+	int field_C;
+	int field_10;
+	int field_14;
+} shader_first;
 
-struct shader_second
-{
-  int field_0;
-  int field_4;
-  int field_8;
-  int field_C;
-  int field_10;
-  int field_14;
-  int field_18;
-  int field_1C;
-  int field_20;
-  int field_24;
-  int field_28;
-  int field_2C;
-  int field_30;
-  int field_34;
-  int field_38;
-  int field_3C;
-  int field_40;
-  int field_44;
-  int field_48;
-  int field_4C;
-  int field_50;
-  int field_54;
-  int field_58;
-  int field_5C;
-  int field_60;
-  int field_64;
-};
+typedef struct {
+	int field_0;
+	int field_4;
+	char* field_8;
+	int field_C;
+	int field_10;
+	int field_14;
+	const char** field_18;
+	int field_1C;
+	int field_20;
+	int field_24;
+	int field_28;
+	int field_2C;
+	int field_30;
+	int field_34;
+	int field_38;
+	int field_3C;
+	int field_40;
+	int field_44;
+	int field_48;
+	int field_4C;
+	int field_50;
+	int field_54;
+	int field_58;
+	int field_5C;
+	int field_60;
+	int field_64;
+} shader_second;
 
-int gbuf[0x1000];
+typedef struct {
+	int unk;
+	int x;
+	int y;
+} shader_error_pos;
 
-void *return_some_addr(void) {
-	return gbuf;
+typedef struct {
+	int type;
+	int unk2;
+	shader_error_pos *pos;
+	char *message;
+} shader_error;
+
+typedef struct {
+	void *buf;
+	int size;
+	int error_count;
+	shader_error *errors;
+} shader_return;
+
+typedef struct {
+	char *unk;
+	char *program;
+	int size;
+} shader_input;
+
+shader_input g_input;
+
+void *get_input(void) {
+	return &g_input;
 }
 
-void do_stuff(void) {
+shader_return *get_shader(int type) {
+	register_syscalls();
+	load_binaries();
+
 	func_ptr SceShaccCg_935CD196 = find_export(0x935cd196);
 	func_ptr SceShaccCg_A8C2C1C8 = find_export(0xA8C2C1C8);
 	func_ptr SceShaccCg_3B58AFA0 = find_export(0x3B58AFA0);
 	func_ptr SceShaccCg_66814F35 = find_export(0x66814F35);
 	func_ptr SceShaccCg_6F01D573 = find_export(0x6F01D573);
 
+	g_input.unk = "<built-in>";
+
 	int ret = 0;
 	
 	// Init the library
 	ret = SceShaccCg_935CD196(0);
-	printf("SceShaccCg_935CD196: 0x%08x\n", ret);
+	LOG("SceShaccCg_935CD196: 0x%08x\n", ret);
 
 	// Register malloc and free function pointers
 	ret = SceShaccCg_6F01D573(malloc, free);
-	printf("SceShaccCg_6F01D573: 0x%08x\n", ret);
+	LOG("SceShaccCg_6F01D573: 0x%08x\n", ret);
 
-	struct shader_first first = {0};
-	struct shader_second second = {0};
+	shader_first first = {0};
+	shader_second second = {0};
 	ret = SceShaccCg_A8C2C1C8(first, 1);
-	printf("SceShaccCg_A8C2C1C8: 0x%08x\n", ret);
+	LOG("SceShaccCg_A8C2C1C8: 0x%08x\n", ret);
 	ret = SceShaccCg_3B58AFA0(second);
-	printf("SceShaccCg_3B58AFA0: 0x%08x\n", ret);
+	LOG("SceShaccCg_3B58AFA0: 0x%08x\n", ret);
 
-	first.field_0 = return_some_addr;
+	first.field_0 = (int)get_input;
 
-	second.field_0 = 0;
-	second.field_8 = "sqrt";
+	second.field_0 = (int)g_input.unk;
+	second.field_4 =  type; // 0 -- vertex, 1 -- fragment
+	second.field_8 = "main";
 	second.field_14 = 1;
 	const char *str = "SHADER_API_PSM";
 	second.field_18 = &str;
@@ -136,21 +167,100 @@ void do_stuff(void) {
 	second.field_4C = 0;
 	second.field_50 = 1;
 	second.field_54 = 3;
-	ret = SceShaccCg_66814F35(&second, &first, 0);
-	printf("SceShaccCg_66814F35: 0x%08x\n", ret);
+	shader_return *r = (void*)SceShaccCg_66814F35(&second, &first, 0);
+	LOG("SceShaccCg_66814F35: %p\n", r);
+	return r;
+}
 
-	int *arr = (int*)ret;
-	printf("%p %p %p %p %p %p %p %p\n", arr[0], arr[1], arr[2], arr[3], arr[4], arr[5], arr[6], arr[7]);
-	arr = arr[3];
-	printf("%08x %08x %08x %08x\n", arr[0], arr[1], arr[2], arr[3]);
+void dump_heap(void) {
+	char buf[4096];
+	FILE *fin = fopen("/proc/self/maps", "rb");
+	for (int i = 0; i < 3; ++i)
+		fgets(buf, sizeof(buf), fin);
+	// 4th line is the heap
+	unsigned heap_start, heap_end;
+	fscanf(fin, "%x-%x", &heap_start, &heap_end);
+	printf("Heap: 0x%08x - 0x%08x\n", heap_start, heap_end);
+	fclose(fin);
+	FILE *fout = fopen("heap.bin", "wb");
+	fwrite((void*)heap_start, heap_end - heap_start, 1, fout);
+	fclose(fout);
+}
+
+void print_usage(void) {
+	printf("Usage: shacc --vertex/--fragment input.cg output.gxp\n");
 }
 
 int main(int argc, char *argv[]) {
-	register_syscalls();
-	load_binaries();
-	printf("--------------------------------------------------------------------------------\n");
-	do_stuff();
-	printf("done\n");
+	if (argc != 4) {
+		print_usage();
+		return -1;
+	}
+	int shader_type;
+	if (strcmp(argv[1], "--vertex") == 0)
+		shader_type = 0;
+	else if (strcmp(argv[1], "--fragment") == 0)
+		shader_type = 1;
+	else {
+		print_usage();
+		return -1;
+	}
+
+	FILE *input = fopen(argv[2], "rb");
+	if (!input) {
+		fprintf(stderr, "%s: cannot open, errno %d\n", argv[2], errno);
+		return -2;
+	}
+	fseek(input, 0, SEEK_END);
+	g_input.size = ftell(input);
+	fseek(input, 0, SEEK_SET);
+	g_input.program = malloc(g_input.size);
+	fread(g_input.program, g_input.size, 1, input);
+	fclose(input);
+
+	shader_return *r = get_shader(shader_type);
+#ifdef DEBUG
+	dump_heap();
+#endif
+	if (!r) {
+		fprintf(stderr, "Unknown error\n");
+		return -2;
+	}
+
+	// print infos/warnings/errors
+	for (int i = 0; i < r->error_count; ++i) {
+		shader_error *e = &r->errors[i];
+		int x = 0, y = 0;
+		if (e->pos) {
+			x = e->pos->x;
+			y = e->pos->y;
+		}
+		switch (e->type) {
+		case 0:
+			printf("INFO (%d, %d):\t", x, y);
+			break;
+		case 1:
+			printf("WARN (%d, %d):\t", x, y);
+			break;
+		case 2:
+			printf("ERROR (%d, %d):\t", x, y);
+			break;
+		}
+		printf("%s\n", e->message);
+	}
+
+
+	if (r->buf) {
+		FILE *output = fopen(argv[3], "wb");
+		if (!output) {
+			fprintf(stderr, "%s: cannot open for write, errno %d\n", argv[3], errno);
+			return -2;
+		}
+		fwrite(r->buf, r->size, 1, output);
+		fclose(output);
+	} else {
+		return -1;
+	}
 
 	return 0;
 }

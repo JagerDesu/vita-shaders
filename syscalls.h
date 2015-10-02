@@ -11,4 +11,5 @@ void sceClibAbort(void);
 int SceLibKernel_91FA6614(int a1, int a2);
 int sceClibVsnprintf(char *str, size_t size, const char *format, va_list ap);
 int sceClibStrcmp(const char *s1, const char *s2);
+int sceClibStrncmp(const char *s1, const char *s2, size_t n);
 unsigned long long sceKernelGetProcessTimeWide(void);

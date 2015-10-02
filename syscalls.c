@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define LOG(fmt, ...) fprintf(stderr, "    " fmt, ##__VA_ARGS__)
+#include "log.h"
 
 void *sceClibMemset(void *s, int c, size_t n) {
 	LOG("sceClibMemset(%p, 0x%02x, 0x%08x)\n", s, c, n);
@@ -25,6 +25,11 @@ void *sceClibMemcpy_safe(void *dest, const void *src, size_t n) {
 int sceClibStrcmp(const char *s1, const char *s2) {
 	LOG("sceClibStrcmp(%s, %s)\n", s1, s2);
 	return strcmp(s1, s2);
+}
+
+int sceClibStrncmp(const char *s1, const char *s2, size_t n) {
+	LOG("sceClibStrncmp(%s, %s, %d)\n", s1, s2, n);
+	return strncmp(s1, s2, n);
 }
 
 int sceKernelCreateLwMutex(void *mem, const char *name, int attr, int count, void *opt) {

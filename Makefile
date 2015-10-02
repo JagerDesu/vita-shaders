@@ -1,6 +1,6 @@
 CC := arm-linux-gnueabihf-gcc
 LD := $(CC)
-CFLAGS := -std=gnu99
+CFLAGS := -std=gnu99 -g
 LDFLAGS := $(CFLAGS)
 
 OBJS := main.o resolve.o syscalls.o
