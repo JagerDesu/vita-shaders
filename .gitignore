@@ -1,0 +1,4 @@
+*.o
+shacc
+*.bin
+*.gxp
